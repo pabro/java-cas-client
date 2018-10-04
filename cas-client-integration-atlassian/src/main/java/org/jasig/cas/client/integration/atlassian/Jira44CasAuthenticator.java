@@ -21,7 +21,11 @@ package org.jasig.cas.client.integration.atlassian;
 import com.atlassian.jira.security.login.JiraSeraphAuthenticator;
 import com.atlassian.seraph.auth.AuthenticatorException;
 import com.atlassian.seraph.auth.LoginReason;
+import com.atlassian.seraph.config.SecurityConfig;
+
 import java.security.Principal;
+import java.util.Map;
+
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
@@ -37,6 +41,7 @@ import org.slf4j.LoggerFactory;
  * @author Scott Battaglia
  * @author Martin Stiborsky
  * @author Jozef Kotlar
+ * @author Petr Abrahamczik
  * @version $Revision$ $Date$
  * @since 3.3.0
  */
@@ -46,6 +51,21 @@ public final class Jira44CasAuthenticator extends JiraSeraphAuthenticator {
     private static final long serialVersionUID = 3852011252741183166L;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Jira44CasAuthenticator.class);
+    
+	private Integer sessionTimeout = null;
+	
+    @Override
+    public void init(final Map<String, String> params, final SecurityConfig config) {
+        super.init(params, config);
+         try {
+            String timeout = params.get("session-timeout");
+            if (timeout != null && !"".equals(timeout)) {
+            	this.sessionTimeout = Integer.valueOf(timeout)*60;
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to configure filter!", e);
+        }
+    }
 
     public Principal getUser(final HttpServletRequest request, final HttpServletResponse response) {
         // First, check to see if this session has already been authenticated during a previous request.
@@ -66,6 +86,11 @@ public final class Jira44CasAuthenticator extends JiraSeraphAuthenticator {
                 getElevatedSecurityGuard().onSuccessfulLoginAttempt(request, username);
                 LoginReason.OK.stampRequestResponse(request, response);
                 LOGGER.debug("Logging in [{}] from CAS.", username);
+                
+                if (this.sessionTimeout != null && session.getMaxInactiveInterval() != this.sessionTimeout) {
+                	session.setMaxInactiveInterval(this.sessionTimeout);
+                    LOGGER.debug("setMaxInactiveInterval to [{}] seconds", this.sessionTimeout);
+                }
             } else {
                 LOGGER.debug("Failed logging [{}] from CAS.", username);
                 getElevatedSecurityGuard().onFailedLoginAttempt(request, username);
